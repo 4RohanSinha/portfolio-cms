@@ -52,8 +52,21 @@ func (d Delta) UUID() string {
 }
 
 func setSnapshot(snapshot *Snapshot) error {
+	f, err := os.OpenFile(".vc/HEAD", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 
-	err := filepath.WalkDir("content/", func(path string, info os.DirEntry, err error) error {
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	_, err = f.WriteString(snapshot.Muuid)
+
+	if err != nil {
+		return err
+	}
+
+	err = filepath.WalkDir(".vc/content/", func(path string, info os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -71,7 +84,7 @@ func setSnapshot(snapshot *Snapshot) error {
 	}
 
 	for fname := range snapshot.Content {
-		f, err := os.OpenFile("content/"+fname, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+		f, err := os.OpenFile(".vc/content/"+fname, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 
 		if err != nil {
 			return err
@@ -145,7 +158,7 @@ func getCompressedForVersion(v Version) ([]byte, error) {
 }
 
 func DumpVersion(v Version) error {
-	fname := "versions/" + v.UUID()
+	fname := ".vc/versions/" + v.UUID()
 
 	file, err := os.Create(fname)
 
@@ -191,7 +204,7 @@ func decompress(compressed []byte) ([]byte, error) {
 }
 
 func getObjectFrom(uuid string) ([]byte, error) {
-	data, err := os.ReadFile("versions/" + uuid)
+	data, err := os.ReadFile(".vc/versions/" + uuid)
 	if err != nil {
 		return nil, err
 	}
