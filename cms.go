@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cms/firebase_service"
 	"cms/version_control"
 )
 
@@ -37,6 +38,18 @@ func main() {
 	version_control.DumpVersion(s)
 	version_control.DumpVersion(d)
 	version_control.Restore("test-2")
+
+	app, err := firebase_service.App()
+
+	if err != nil {
+		panic(err)
+	}
+
+	err = firebase_service.SetHead(app)
+
+	if err != nil {
+		panic(err)
+	}
 	//Restore("test")
 
 }

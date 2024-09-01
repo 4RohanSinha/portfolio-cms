@@ -117,6 +117,8 @@ func applyDelta(v_delta Version, base_snapshot Snapshot) Snapshot {
 		delete(base_snapshot.Content, deletion)
 	}
 
+	base_snapshot.Muuid = delta.Muuid
+
 	return base_snapshot
 }
 
@@ -218,7 +220,7 @@ func getObjectFrom(uuid string) ([]byte, error) {
 	return decompressedData, nil
 }
 
-func lookup(uuid string) (Version, error) {
+func Lookup(uuid string) (Version, error) {
 	var v_json map[string]interface{}
 
 	jsonData, err := getObjectFrom(uuid)
@@ -254,17 +256,17 @@ func lookup(uuid string) (Version, error) {
 	}
 }
 
-func reconstructSnapshot(v Version) Snapshot {
+func ReconstructSnapshot(v Version) Snapshot {
 	if v.IsSnapshot() {
 		return v.(Snapshot)
 	} else if delta_v, ok := v.(Delta); ok {
-		parent_v, err := lookup(delta_v.BaseUuid)
+		parent_v, err := Lookup(delta_v.BaseUuid)
 
 		if err != nil {
 			panic("Error looking up uuid")
 		}
 
-		parent_snap := reconstructSnapshot(parent_v)
+		parent_snap := ReconstructSnapshot(parent_v)
 		cur_snap := applyDelta(delta_v, parent_snap)
 		return cur_snap
 	}
@@ -273,12 +275,38 @@ func reconstructSnapshot(v Version) Snapshot {
 }
 
 func Restore(uuid string) {
-	v, err := lookup(uuid)
+	v, err := Lookup(uuid)
 
 	if err != nil {
 		panic("Error looking up uuid")
 	}
 
-	snapshot := reconstructSnapshot(v)
+	snapshot := ReconstructSnapshot(v)
 	setSnapshot(&snapshot)
+}
+
+func Head() (Snapshot, error) {
+	var head_uuid string
+
+	data, err := os.ReadFile(".vc/HEAD")
+
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	head_uuid = string(data)
+
+	head_v, err := Lookup(head_uuid)
+
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	v_snapshot := ReconstructSnapshot(head_v)
+
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	return v_snapshot, nil
 }
