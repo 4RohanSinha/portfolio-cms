@@ -1,3 +1,5 @@
 .vc/
 *.swp
 personal-portfolio-57012-firebase-adminsdk-cogpk-791995c08a.json
+cms
+*.py
