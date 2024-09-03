@@ -11,7 +11,6 @@ import (
 )
 
 type Metadata struct {
-	Title       string
 	Timestamp   string
 	Description string
 }
@@ -276,7 +275,6 @@ func ReconstructSnapshot(v Version) Snapshot {
 
 func Restore(uuid string) {
 	v, err := Lookup(uuid)
-
 	if err != nil {
 		panic("Error looking up uuid")
 	}
@@ -309,4 +307,52 @@ func Head() (Snapshot, error) {
 	}
 
 	return v_snapshot, nil
+}
+
+func CalculateDelta(snapshot Snapshot, metadata Metadata, uuid string) (Delta, error) {
+	filesEncountered := make(map[string]struct{}, 0)
+	deletions := make([]string, 0)
+	changes := make(map[string]string)
+
+	err := filepath.WalkDir(".vc/content/", func(path string, info os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		filesEncountered[info.Name()] = struct{}{}
+
+		if !info.IsDir() {
+			if contentData, err := os.ReadFile(path); err == nil {
+				content := string(contentData)
+				if content != snapshot.Content[info.Name()] {
+					changes[info.Name()] = content
+				}
+			} else {
+				return fmt.Errorf("failed to read file %s: %w", path, err)
+			}
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("failed to remove file %s: %w", path, err)
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return Delta{}, err
+	}
+
+	for item := range snapshot.Content {
+		if _, found := filesEncountered[item]; !found {
+			deletions = append(deletions, item)
+		}
+	}
+
+	return Delta{
+		Mdata:     metadata,
+		Muuid:     uuid,
+		BaseUuid:  snapshot.Muuid,
+		Changes:   changes,
+		Deletions: deletions,
+	}, nil
+
 }

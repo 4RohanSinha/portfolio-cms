@@ -3,53 +3,102 @@ package main
 import (
 	"cms/firebase_service"
 	"cms/version_control"
+	"flag"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func main() {
-	m := version_control.Metadata{
-		Title:       "test",
-		Timestamp:   "test",
-		Description: "test",
+
+	var newVersionId string
+	var newVersionDescr string
+
+	if len(os.Args) < 2 {
+		panic("No command provided")
 	}
 
-	data := make(map[string]string)
+	command := os.Args[1]
+	args := os.Args[2:]
 
-	data["test"] = "test"
-	data["test 2"] = "test 2"
-
-	s := version_control.Snapshot{
-		Mdata:   m,
-		Muuid:   "test",
-		Content: data,
+	s_meta := version_control.Metadata{
+		Timestamp:   time.Now().String(),
+		Description: "initial snapshot",
 	}
 
-	data_2 := make(map[string]string)
+	switch command {
+	case "restore":
+		var fileName string
+		cmdFlags := flag.NewFlagSet("restore", flag.ExitOnError)
+		cmdFlags.StringVar(&newVersionId, "id", "", "ID of version to restore")
+		cmdFlags.Parse(args)
 
-	data_2["test"] = "test"
+		err := filepath.WalkDir(".vc/versions/", func(path string, info os.DirEntry, err error) error {
+			if !info.IsDir() && strings.HasPrefix(info.Name(), newVersionId) {
+				fileName = info.Name()
+				return nil
+			}
 
-	d := version_control.Delta{
-		Mdata:     m,
-		Muuid:     "test-2",
-		BaseUuid:  "test",
-		Changes:   data_2,
-		Deletions: []string{"test 2"},
+			if err != nil {
+				return err
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			panic(err)
+		}
+
+		version_control.Restore(fileName)
+	case "save":
+		cmdFlags := flag.NewFlagSet("save", flag.ExitOnError)
+		cmdFlags.StringVar(&newVersionDescr, "descr", "", "Description of changes")
+		cmdFlags.Parse(args)
+
+		v_meta := version_control.Metadata{
+			Timestamp:   time.Now().String(),
+			Description: newVersionDescr,
+		}
+
+		head, err := version_control.Head()
+
+		if err != nil {
+			s := version_control.Snapshot{
+				Mdata:   s_meta,
+				Muuid:   uuid.NewString(),
+				Content: make(map[string]string),
+			}
+
+			version_control.DumpVersion(s)
+			//version_control.Restore(s_meta.Title)
+			head = s
+		}
+
+		delta, err := version_control.CalculateDelta(head, v_meta, uuid.NewString())
+
+		if err != nil {
+			panic(err)
+		}
+
+		version_control.DumpVersion(delta)
+		version_control.Restore(delta.Muuid)
+	case "upload":
+		app, err := firebase_service.App()
+
+		if err != nil {
+			panic(err)
+		}
+
+		err = firebase_service.SetHead(app)
+
+		if err != nil {
+			panic(err)
+		}
+	default:
+		panic("Unknown command")
 	}
-
-	version_control.DumpVersion(s)
-	version_control.DumpVersion(d)
-	version_control.Restore("test-2")
-
-	app, err := firebase_service.App()
-
-	if err != nil {
-		panic(err)
-	}
-
-	err = firebase_service.SetHead(app)
-
-	if err != nil {
-		panic(err)
-	}
-	//Restore("test")
-
 }
