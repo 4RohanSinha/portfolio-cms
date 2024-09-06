@@ -87,13 +87,22 @@ func main() {
 		version_control.DumpVersion(delta)
 		version_control.Restore(delta.Muuid)
 	case "upload":
+		var collection string
+		cmdFlags := flag.NewFlagSet("upload", flag.ExitOnError)
+		cmdFlags.StringVar(&collection, "mode", "", "[prod/dev]")
+		cmdFlags.Parse(args)
+
 		app, err := firebase_service.App()
 
 		if err != nil {
 			panic(err)
 		}
 
-		err = firebase_service.SetHead(app)
+		if collection != "prod" && collection != "dev" {
+			panic("Invalid mode picked.")
+		}
+
+		err = firebase_service.SetHead(app, "posts-"+collection)
 
 		if err != nil {
 			panic(err)

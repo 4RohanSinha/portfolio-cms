@@ -1,11 +1,13 @@
 package firebase_service
 
 import (
+	"bufio"
 	"cms/version_control"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 
 	"cloud.google.com/go/firestore"
 	"cloud.google.com/go/storage"
@@ -82,7 +84,36 @@ func UploadFile(fname string, app *firebase.App) error {
 
 }
 
-func SetHead(app *firebase.App) error {
+func getTitle(fname string) string {
+	file, err := os.Open(".vc/content/" + fname)
+
+	if err != nil {
+		return "NEW Post"
+	}
+
+	defer file.Close()
+
+	re := regexp.MustCompile(`^#\s+(.*)`)
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if match := re.FindStringSubmatch(line); match != nil {
+			return match[1]
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Println(err)
+		return "NEW Post"
+	}
+
+	return "NEW Post"
+}
+
+func SetHead(app *firebase.App, collection string) error {
 
 	f_client, err := FirestoreClient(app)
 
@@ -97,7 +128,7 @@ func SetHead(app *firebase.App) error {
 	}
 
 	ctx := context.Background()
-	colRef := f_client.Collection("posts")
+	colRef := f_client.Collection(collection)
 
 	docs, err := colRef.Documents(ctx).GetAll()
 
@@ -106,11 +137,16 @@ func SetHead(app *firebase.App) error {
 	}
 
 	for _, doc := range docs {
-		_, err := doc.Ref.Delete(ctx)
+		_, exists := head.Content[doc.Ref.ID+".md"]
 
-		if err != nil {
-			return err
+		if !exists {
+			_, err := doc.Ref.Delete(ctx)
+
+			if err != nil {
+				return err
+			}
 		}
+
 	}
 
 	for k := range head.Content {
@@ -120,16 +156,17 @@ func SetHead(app *firebase.App) error {
 			doc_id = k[:len(k)-3]
 		}
 
+		title := getTitle(k)
 		err := UploadFile(k, app)
 
 		if err != nil {
 			panic(err)
 		}
 
-		_, err = f_client.Collection("posts-dev").Doc(k).Set(context.Background(), map[string]interface{}{
+		_, err = f_client.Collection(collection).Doc(doc_id).Set(context.Background(), map[string]interface{}{
 			"document": k,
 			"id":       doc_id,
-			"title":    "New post",
+			"title":    title,
 		})
 
 		if err != nil {
